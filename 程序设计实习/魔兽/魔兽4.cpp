@@ -271,35 +271,51 @@ Its morale is 0.00
 #include<iostream>
 #include<string>
 #include<vector>
-#include<set>
-#include<map>
 #include<iomanip>
 #include<unordered_map>
-#include<utility>
-#include<queue>
-#include<cstdio>
 #include<sstream>
+#include<algorithm>
 
 using namespace std;
 
-int current_time = 0;
+int current_time = 0;//当前时间
 bool red_conquered = false;
 bool blue_conquered = false;
-int loyaltyDecrease, timeLimit, cityCount;
+int loyaltyDecrease, timeLimit, cityCount, arrowPower;
 
 unordered_map<string, int> initialHPs;
 unordered_map<string, int> initialForces;
 unordered_map<string, vector<string>> buildOrder;
 vector<string> weapon_kinds = {"sword", "bomb", "arrow"};
 
-enum fight_result { BOTH_DEAD, BOTH_ALIVE, BLUE_WIN, RED_WIN };
+enum fight_result { BOTH_DEAD, BOTH_ALIVE, BLUE_WIN, RED_WIN, NO_FIGHT };
+const int NO_SIDE = 0;
+const int RED_SIDE = 1;
+const int BLUE_SIDE = 2;
+const int SWORD_ID = 0;
+const int BOMB_ID = 1;
+const int ARROW_ID = 2;
 
 string get_format_clock() {
     int hour = current_time / 60;
     int minute = current_time % 60;
     ostringstream ost;
     ost << setw(3) << setfill('0') << hour << ":" << setw(2) << setfill('0') << minute;
-    return move(ost.str());
+    return ost.str();
+}
+
+string side_name(int side) {
+    return side == RED_SIDE ? "red" : "blue";
+}
+
+int side_id(const string& side) {
+    return side == "red" ? RED_SIDE : BLUE_SIDE;
+}
+
+int weapon_index(const string& name) {
+    if (name == "sword") return SWORD_ID;
+    if (name == "bomb") return BOMB_ID;
+    return ARROW_ID;
 }
 
 class weapon {
@@ -308,66 +324,51 @@ public:
     weapon(string name_) : name(name_) {}
     virtual ~weapon() {}
     virtual void attack(int attacker_force, string attacker_name, int& attacker_hp, int& injure_hp) {}
-    virtual bool is_usable() { return false; }
+    virtual bool is_usable() { return true; }
 };
 
 class sword : public weapon {
 public:
-    sword(string name_) : weapon(name_) {}
+    int power;
+    sword(string name_, int power_) : weapon(name_), power(power_) {}
     void attack(int attacker_force, string attacker_name, int& attacker_hp, int& injure_hp) override {
-        int attack_dmg = (attacker_force * 2) / 10;
-        injure_hp -= attack_dmg;
+        injure_hp -= power;
+        power = power * 8 / 10;
     }
-    bool is_usable() override { return true; }
+    bool is_usable() override { return power > 0; }
 };
 
 class bomb : public weapon {
 public:
-    bool usable;
+    bool usable;//是否可以使用
     bomb(string name_) : weapon(name_), usable(true) {}
-    void attack(int attacker_force, string attacker_name, int& attacker_hp, int& injure_hp) override {
-        if (!usable) return;
-        int attack_dmg = (attacker_force * 4) / 10;
-        int self_attack = (attacker_name == "ninja") ? 0 : attack_dmg / 2;
-        attacker_hp -= self_attack;
-        injure_hp -= attack_dmg;
-        usable = false;
-    }
     bool is_usable() override { return usable; }
 };
 
 class arrow : public weapon {
 public:
-    int use_count;
+    int use_count; // 这里表示剩余可用次数，出生时为3
     arrow(string name_, int use_count_) : weapon(name_), use_count(use_count_) {}
-    void attack(int attacker_force, string attacker_name, int& attacker_hp, int& injure_hp) override {
-        if (use_count >= 2) return;
-        int attack_dmg = (attacker_force * 3) / 10;
-        injure_hp -= attack_dmg;
-        use_count++;
-    }
-    bool is_usable() override { return use_count < 2; }
+    bool is_usable() override { return use_count > 0; }
 };
-
-
-sword* sw = nullptr;
 
 class warrior {
 public:
-    int id;              
-    int hp;              
-    int force;           
-    string side;         
-    string name;         
-    int location;        
-    int cur_weapon_ind;  
+    int id;
+    int hp;
+    int force;
+    string side;
+    string name;
+    int location;
+    int cur_weapon_ind;
     vector<weapon*> weapons;
 
     warrior(int id_, int hp_, string side_, string name_, int location_, int force_)
-        : id(id_), hp(hp_), side(side_), name(name_), location(location_), force(force_) {
-        weapons = vector<weapon*>(10, nullptr);
+        : id(id_), hp(hp_), force(force_), side(side_), name(name_), location(location_), cur_weapon_ind(0) {
+        weapons = vector<weapon*>(3, nullptr);
     }
-    
+
+   
     warrior(warrior& w) {
         id = w.id;
         hp = w.hp;
@@ -375,85 +376,49 @@ public:
         side = w.side;
         name = w.name;
         location = w.location;
-        weapons = std::move(w.weapons);
+        cur_weapon_ind = w.cur_weapon_ind;
+        weapons = w.weapons;
+        w.weapons.assign(3, nullptr);
     }
-    
-    virtual ~warrior() {}
+
+    virtual ~warrior() {
+        for (weapon* p : weapons) delete p;
+    }
+
+    virtual void after_march() {}
 
     virtual void march() {
-        int direction = side == "red" ? 1 : -1;
+        int direction = (side == "red" ? 1 : -1);
         location += direction;
-        cout << get_format_clock() << " " << side << " " << name << " " << id 
-             << " marched to city " << location << " with " << hp 
+        after_march();
+        cout << get_format_clock() << " " << side << " " << name << " " << id
+             << " marched to city " << location << " with " << hp
              << " elements and force " << force << endl;
     }
 
-    void reach_headquarter() {
-        if (name == "iceman") {
-            int decrease_elements = hp / 10;
-            hp -= decrease_elements;
-        }
+    virtual void reach_headquarter() {
+        int direction = (side == "red" ? 1 : -1);
+        location += direction;
+        after_march();
         string enemy_side = side == "blue" ? "red" : "blue";
-
-        cout << get_format_clock() << " " << side << " " << name << " " << id 
-             << " reached " << enemy_side << " headquarter with " << hp 
+        cout << get_format_clock() << " " << side << " " << name << " " << id
+             << " reached " << enemy_side << " headquarter with " << hp
              << " elements and force " << force << endl;
-        cout << get_format_clock() << " " << enemy_side << " headquarter was taken\n";
-        
-        if (enemy_side == "blue")
-            blue_conquered = true;
-        else
-            red_conquered = true;
     }
 
     void sort_weapons(bool used_first) {
-        int sword_cnt = 0, bomb_cnt = 0, new_arrow_cnt = 0, used_arrow_cnt = 0;
-        for (int i = 0; i < 10; i++) {
-            weapon* p = weapons[i];
-            if (p == nullptr) continue;
-            if (p->name == "sword") {
-                sword_cnt++;
-            } else if (p->name == "bomb") {
-                bomb* b = dynamic_cast<bomb*>(p);
-                if (b->is_usable()) {
-                    bomb_cnt++;
-                }
-                delete p;
-            } else {
-                arrow* a = dynamic_cast<arrow*>(p);
-                if (a->use_count == 0) {
-                    new_arrow_cnt++;
-                } else if (a->use_count == 1) {
-                    used_arrow_cnt++;
-                }
-                delete p;
-            }
-            weapons[i] = nullptr;
-        }
-        int ind = 0;
-        while (sword_cnt--) weapons[ind++] = sw;
-        while (bomb_cnt--) weapons[ind++] = new bomb("bomb");
-        if (!used_first) {
-            while (new_arrow_cnt--) weapons[ind++] = new arrow("arrow", 0);
-            while (used_arrow_cnt--) weapons[ind++] = new arrow("arrow", 1);
-        } else {
-            while (used_arrow_cnt--) weapons[ind++] = new arrow("arrow", 1);
-            while (new_arrow_cnt--) weapons[ind++] = new arrow("arrow", 0);
-        }
-        cur_weapon_ind = 0;
+        clear_weapons();
     }
 
     int count_weapons() {
+        clear_weapons();
         int cnt = 0;
-        for (weapon* p : weapons) {
-            if (p != nullptr) cnt++;
-            else break;
-        }
+        for (weapon* p : weapons) if (p != nullptr) cnt++;
         return cnt;
     }
 
     void clear_weapons() {
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 3; i++) {
             if (weapons[i] != nullptr && !weapons[i]->is_usable()) {
                 delete weapons[i];
                 weapons[i] = nullptr;
@@ -461,56 +426,101 @@ public:
         }
     }
 
-    void take_weapons_after_fight(warrior* enemy) {
-        if (this == enemy) return;
-        if (hp <= 0) return;
-        enemy->clear_weapons();
-        enemy->sort_weapons(false);
+    bool has_weapon(const string& weapon_name) {
+        int ind = weapon_index(weapon_name);
         clear_weapons();
-        sort_weapons(true);
-        int tot_weapon = count_weapons();
-        int ind = 0;
-        for (int i = tot_weapon; i < 10; i++) {
-            weapons[i] = enemy->weapons[ind++];
+        return weapons[ind] != nullptr;
+    }
+
+    sword* get_sword() {
+        clear_weapons();
+        return dynamic_cast<sword*>(weapons[SWORD_ID]);
+    }
+
+    bomb* get_bomb() {
+        clear_weapons();
+        return dynamic_cast<bomb*>(weapons[BOMB_ID]);
+    }
+
+    arrow* get_arrow() {
+        clear_weapons();
+        return dynamic_cast<arrow*>(weapons[ARROW_ID]);
+    }
+
+    int sword_power() {
+        sword* s = get_sword();
+        return s == nullptr ? 0 : s->power;
+    }
+
+    int use_sword() {
+        sword* s = get_sword();
+        if (s == nullptr) return 0;
+        int ret = s->power;
+        s->power = s->power * 8 / 10;
+        clear_weapons();
+        return ret;
+    }
+
+    int attack_damage(bool fight_back = false) {
+        int base_force = fight_back ? force / 2 : force;
+        return base_force + use_sword();
+    }
+
+    int predict_damage(bool fight_back = false) {
+        int base_force = fight_back ? force / 2 : force;
+        return base_force + sword_power();
+    }
+
+    void hurt(int dmg) {
+        hp -= dmg;
+        if (hp < 0) hp = 0;
+    }
+
+    void set_weapon(weapon* w) {
+        if (w == nullptr) return;
+        int ind = weapon_index(w->name);
+        if (weapons[ind] != nullptr) delete weapons[ind];
+        weapons[ind] = w;
+    }
+
+    void take_weapons_after_fight(warrior* enemy) {
+        if (this == enemy || hp <= 0 || enemy == nullptr) return;
+        if (name != "wolf") return;
+        clear_weapons();
+        enemy->clear_weapons();
+        for (int i = 0; i < 3; i++) {
+            if (weapons[i] == nullptr && enemy->weapons[i] != nullptr) {
+                weapons[i] = enemy->weapons[i];
+                enemy->weapons[i] = nullptr;
+            }
         }
-        sort_weapons(true);
     }
 
     bool is_alive() { return hp > 0; }
 
-    weapon* find_proper_weapon() {
-        weapon* res = weapons[cur_weapon_ind];
-        if (res != nullptr && res->is_usable()) {
-            cur_weapon_ind = (cur_weapon_ind + 1) % 10;
-            return res;
-        } else {
-            int weapon_ind = (cur_weapon_ind + 1) % 10;
-            while (weapon_ind != cur_weapon_ind) {
-                res = weapons[weapon_ind];
-                if (res != nullptr && res->is_usable()) {
-                    cur_weapon_ind = (weapon_ind + 1) % 10;
-                    return res;
-                } else {
-                    weapon_ind = (weapon_ind + 1) % 10;
-                }
-            }
-        }
-        return nullptr;
-    }
+    weapon* find_proper_weapon() { return nullptr; }
 
     void attack(warrior* enemy) {
-        weapon* w = find_proper_weapon();
-        if (w == nullptr) return;
-        w->attack(this->force, this->name, this->hp, enemy->hp);
+        if (enemy == nullptr) return;
+        enemy->hurt(attack_damage(false));
+    }
+
+    bool reached_enemy_headquarter() {
+        return (side == "red" && location == cityCount + 1) ||
+               (side == "blue" && location == 0);
     }
 };
 
 class dragon : public warrior {
 public:
-    dragon(warrior& w) : warrior(w) {}
-    void yell() {
-        cout << get_format_clock() << " " << side << " " << name << " " << id 
-             << " yelled in city " << location << endl;
+    double morale;
+    dragon(warrior& w, double morale_) : warrior(w), morale(morale_) {}
+    void yell(vector<string>* logs = nullptr) {
+        ostringstream ost;
+        ost << get_format_clock() << " " << side << " " << name << " " << id
+            << " yelled in city " << location;
+        if (logs) logs->push_back(ost.str());
+        else cout << ost.str() << endl;
     }
 };
 
@@ -518,36 +528,30 @@ class lion : public warrior {
 public:
     int loyalty;
     lion(warrior& w, int loyalty_) : warrior(w), loyalty(loyalty_) {}
-    
+
     void march() override {
-        int direction = side == "red" ? 1 : -1;
-        location += direction;
-        loyalty -= loyaltyDecrease;
-        cout << get_format_clock() << " " << side << " " << name << " " << id 
-             << " marched to city " << location << " with " << hp 
-             << " elements and force " << force << endl;
+        warrior::march();
     }
-    
+
     bool escape() {
+        if (reached_enemy_headquarter()) return false;
         if (loyalty > 0) return false;
-        else {
-            cout << get_format_clock() << " " << side << " lion " << id << " ran away\n";
-            return true;
-        }
+        cout << get_format_clock() << " " << side << " lion " << id << " ran away\n";
+        return true;
     }
 };
 
 class iceman : public warrior {
 public:
-    iceman(warrior& w) : warrior(w) {}
-    void march() override {
-        int direction = side == "red" ? 1 : -1;
-        location += direction;
-        int decrease_elements = hp / 10;
-        hp -= decrease_elements;
-        cout << get_format_clock() << " " << side << " " << name << " " << id 
-             << " marched to city " << location << " with " << hp 
-             << " elements and force " << force << endl;
+    int march_steps;
+    iceman(warrior& w) : warrior(w), march_steps(0) {}
+    void after_march() override {
+        march_steps++;
+        if (march_steps % 2 == 0) {
+            if (hp - 9 <= 0) hp = 1;
+            else hp -= 9;
+            force += 20;
+        }
     }
 };
 
@@ -555,29 +559,7 @@ class wolf : public warrior {
 public:
     wolf(warrior& w) : warrior(w) {}
     void rob_weapons(warrior* enemy) {
-        if (enemy->name == "wolf") return;
-        if (enemy == this) return;
-        enemy->clear_weapons();
-        enemy->sort_weapons(false);
-        clear_weapons();
-        sort_weapons(true);
-
-        weapon* first_weapon = enemy->weapons[0];
-        if (first_weapon == nullptr) return;
-
-        string first_weapon_name = first_weapon->name;
-        int self_ind = count_weapons(), enemy_ind = 0;
-        for (weapon* p : enemy->weapons) {
-            if (p == nullptr || p->name != first_weapon_name) break;
-            weapons[self_ind++] = p;
-            enemy->weapons[enemy_ind++] = nullptr;
-        }
-        enemy->sort_weapons(false);
-        sort_weapons(true);
-        cout << get_format_clock() << " " << side << " " << name << " " << id 
-             << " took " << enemy_ind << " " << first_weapon_name 
-             << " from " << enemy->side << " " << enemy->name << " " << enemy->id 
-             << " in city " << location << endl;
+        take_weapons_after_fight(enemy);
     }
 };
 
@@ -586,15 +568,19 @@ public:
     ninja(warrior& w) : warrior(w) {}
 };
 
-
 class city {
 public:
-    warrior* first;
-    warrior* second;
-    city(warrior* red, warrior* blue) : first(red), second(blue) {}
+    warrior* first;   // red warrior
+    warrior* second;  // blue warrior
+    int elements;
+    int flag;         // 0 none, 1 red, 2 blue
+    int lastWinner;   // 上一次在本城市杀死敌人的一方；平局清零
+
+    city(warrior* red = nullptr, warrior* blue = nullptr)
+        : first(red), second(blue), elements(0), flag(NO_SIDE), lastWinner(NO_SIDE) {}
 };
 
-vector<city> cities; 
+vector<city> cities;
 
 void warrior_born(warrior& w);
 
@@ -604,9 +590,10 @@ public:
     int totalLife;
     int totalCount;
     int currentIdx;
+    int enemyCount;
 
     headquarter(string side_, int totalLife_)
-        : side(side_), totalLife(totalLife_), totalCount(0), currentIdx(0) {}
+        : side(side_), totalLife(totalLife_), totalCount(0), currentIdx(0), enemyCount(0) {}
 
     warrior* make_warrior() {
         warrior* ret = nullptr;
@@ -619,46 +606,49 @@ public:
             int location = (side == "red") ? 0 : cityCount + 1;
             totalLife -= cost;
             currentIdx = (currentIdx + 1) % 5;
-            
             ret = new warrior(warrior_id, cost, side, w_name, location, initialForces[w_name]);
         }
         return ret;
     }
 
-    weapon* make_weapon(string name) {
-        if (name == "sword") return sw;
+    weapon* make_weapon(string name, int warrior_force) {
+        if (name == "sword") {
+            int sword_power = warrior_force * 2 / 10;
+            if (sword_power == 0) return nullptr;
+            return new sword(name, sword_power);
+        }
         if (name == "bomb") return new bomb(name);
-        if (name == "arrow") return new arrow(name, 0);
+        if (name == "arrow") return new arrow(name, 3);
         return nullptr;
     }
 
     warrior* further_process(warrior* p) {
         if (p == nullptr) return nullptr;
-        
-        string name = p->name;
+
+        string w_name = p->name;
         warrior* ret = nullptr;
-        
-        if (name == "dragon") {
+
+        if (w_name == "dragon") {
             string weapon_name = weapon_kinds[p->id % 3];
-            p->weapons[0] = make_weapon(weapon_name);
-            ret = new dragon(*p);
-        } else if (name == "ninja") {
+            p->set_weapon(make_weapon(weapon_name, p->force));
+            double morale = 1.0 * totalLife / initialHPs[w_name];
+            ret = new dragon(*p, morale);
+        } else if (w_name == "ninja") {
             string weapon_name1 = weapon_kinds[p->id % 3];
             string weapon_name2 = weapon_kinds[(p->id + 1) % 3];
-            p->weapons[0] = make_weapon(weapon_name1);
-            p->weapons[1] = make_weapon(weapon_name2);
+            p->set_weapon(make_weapon(weapon_name1, p->force));
+            p->set_weapon(make_weapon(weapon_name2, p->force));
             ret = new ninja(*p);
-        } else if (name == "iceman") {
+        } else if (w_name == "iceman") {
             string weapon_name = weapon_kinds[p->id % 3];
-            p->weapons[0] = make_weapon(weapon_name);
+            p->set_weapon(make_weapon(weapon_name, p->force));
             ret = new iceman(*p);
-        } else if (name == "lion") {
-            string weapon_name = weapon_kinds[p->id % 3];
-            p->weapons[0] = make_weapon(weapon_name);
+        } else if (w_name == "lion") {
             ret = new lion(*p, totalLife);
-        } else if (name == "wolf") {
+        } else if (w_name == "wolf") {
             ret = new wolf(*p);
         }
+        delete p;
         return ret;
     }
 
@@ -669,7 +659,7 @@ public:
             if (p->side == "red") {
                 cities[0].first = p;
             } else {
-                cities[cities.size() - 1].second = p;
+                cities[cityCount + 1].second = p;
             }
         }
     }
@@ -677,7 +667,10 @@ public:
 
 void warrior_born(warrior& w) {
     cout << get_format_clock() << " " << w.side << " " << w.name << " " << w.id << " born\n";
-    if (w.name == "lion") {
+    if (w.name == "dragon") {
+        dragon* d = dynamic_cast<dragon*>(&w);
+        cout << "Its morale is " << fixed << setprecision(2) << d->morale << endl;
+    } else if (w.name == "lion") {
         lion* l = dynamic_cast<lion*>(&w);
         cout << "Its loyalty is " << l->loyalty << endl;
     }
@@ -689,17 +682,17 @@ void happen00_warrior_born(headquarter& red, headquarter& blue) {
 }
 
 void happen05_lion_escape() {
-    for (int i = 0; i < cities.size(); i++) {
-        warrior *first = cities[i].first, *second = cities[i].second;
-        if (first != nullptr && first->name == "lion") {
-            lion* l = dynamic_cast<lion*>(first);
+    for (int i = 0; i <= cityCount + 1; i++) {
+        warrior *r = cities[i].first, *b = cities[i].second;
+        if (r != nullptr && r->name == "lion") {
+            lion* l = dynamic_cast<lion*>(r);
             if (l->escape()) {
                 delete cities[i].first;
                 cities[i].first = nullptr;
             }
         }
-        if (second != nullptr && second->name == "lion") {
-            lion* l = dynamic_cast<lion*>(second);
+        if (b != nullptr && b->name == "lion") {
+            lion* l = dynamic_cast<lion*>(b);
             if (l->escape()) {
                 delete cities[i].second;
                 cities[i].second = nullptr;
@@ -708,118 +701,351 @@ void happen05_lion_escape() {
     }
 }
 
-void happen10_warrior_march() {
-    warrior* b = cities[1].second;
-    if (b != nullptr) {
-        b->reach_headquarter();
-        delete cities[1].second;
-        cities[1].second = nullptr;
-    }
+struct MoveEvent {
+    int dest;
+    int order;
+    warrior* w;
+};
 
-    warrior* next_move_red = cities[0].first;
-    cities[0].first = nullptr;
+void happen10_warrior_march(headquarter& red, headquarter& blue) {
+    vector<MoveEvent> moves;
 
-    for (int i = 1; i < cities.size() - 1; i++) {
-        warrior *r = next_move_red, *b = cities[i + 1].second;
-        next_move_red = cities[i].first;
-        if (r != nullptr) r->march();
-        cities[i].first = r;
-
-        if (b != nullptr) b->march();
-        cities[i].second = b;
-    }
-    cities[cities.size() - 1].second = nullptr;
-    if (next_move_red != nullptr) {
-        next_move_red->reach_headquarter();
-        delete next_move_red;
-    }
-}
-
-void happen35_wolf_rob() {
-    for (int i = 1; i < cities.size() - 1; i++) {
-        warrior *r = cities[i].first, *b = cities[i].second;
-        if (r == nullptr || b == nullptr) continue;
-        
-        if (r->name == "wolf") {
-            wolf* w = dynamic_cast<wolf*>(r);
-            w->rob_weapons(b);
-        }
-        if (b->name == "wolf") {
-            wolf* w = dynamic_cast<wolf*>(b);
-            w->rob_weapons(r);
+    for (int i = 0; i <= cityCount; i++) {
+        if (cities[i].first != nullptr) {
+            moves.push_back({i + 1, 0, cities[i].first});
+            cities[i].first = nullptr;
         }
     }
-}
-
-fight_result trigger_fight(warrior* first, warrior* second) {
-    int still_epoch = 0;
-    while (first->is_alive() && second->is_alive()) {
-        int first_elements = first->hp, second_elements = second->hp;
-        if (first->is_alive()) first->attack(second);
-        if (second->is_alive()) second->attack(first);
-        
-        if (first_elements == first->hp && second_elements == second->hp) {
-            still_epoch++;
+    for (int i = cityCount + 1; i >= 1; i--) {
+        if (cities[i].second != nullptr) {
+            moves.push_back({i - 1, 1, cities[i].second});
+            cities[i].second = nullptr;
         }
-        if (still_epoch >= 12) return BOTH_ALIVE;
     }
-    warrior* alived_warrior = first->is_alive() ? first : second;
-    if (!alived_warrior->is_alive()) return BOTH_DEAD;
-    else {
-        if (alived_warrior->side == "red") return RED_WIN;
-        else return BLUE_WIN;
-    }
-}
 
-void happen40_war() {
-    for (int i = 1; i < cities.size() - 1; i++) {
-        warrior *r = cities[i].first, *b = cities[i].second;
-        if (r == nullptr || b == nullptr) continue;
-        
-        r->clear_weapons();
-        r->sort_weapons(true);
-        b->clear_weapons();
-        b->sort_weapons(true);
-        
-        fight_result res;
-        if (i % 2) res = trigger_fight(r, b);
-        else res = trigger_fight(b, r);
-        
-        dragon* rd = dynamic_cast<dragon*>(r);
-        dragon* bd = dynamic_cast<dragon*>(b);
-        
-        if (res == BOTH_ALIVE) {
-            cout << get_format_clock() << " both red " << r->name << " " << r->id 
-                 << " and blue " << b->name << " " << b->id << " were alive in city " << r->location << endl;
-            if (rd != nullptr) rd->yell();
-            if (bd != nullptr) bd->yell();
-        } else if (res == BOTH_DEAD) {
-            cout << get_format_clock() << " both red " << r->name << " " << r->id 
-                 << " and blue " << b->name << " " << b->id << " died in city " << r->location << endl;
-        } else if (res == RED_WIN) {
-            r->take_weapons_after_fight(b);
-            cout << get_format_clock() << " red " << r->name << " " << r->id 
-                 << " killed blue " << b->name << " " << b->id << " in city " << r->location 
-                 << " remaining " << r->hp << " elements\n";
-            if (rd != nullptr) rd->yell();
+    sort(moves.begin(), moves.end(), [](const MoveEvent& a, const MoveEvent& b) {
+        if (a.dest != b.dest) return a.dest < b.dest;
+        return a.order < b.order; // 同一城市红武士先输出，蓝武士后输出
+    });
+
+    for (MoveEvent& e : moves) {
+        warrior* w = e.w;
+        if (e.dest == 0 || e.dest == cityCount + 1) {
+            w->reach_headquarter();
+            if (e.dest == 0) {
+                red.enemyCount++;
+                if (cities[0].second == nullptr) cities[0].second = w;
+                else delete w;
+                if (red.enemyCount == 2) {
+                    cout << get_format_clock() << " red headquarter was taken\n";
+                    red_conquered = true;
+                }
+            } else {
+                blue.enemyCount++;
+                if (cities[cityCount + 1].first == nullptr) cities[cityCount + 1].first = w;
+                else delete w;
+                if (blue.enemyCount == 2) {
+                    cout << get_format_clock() << " blue headquarter was taken\n";
+                    blue_conquered = true;
+                }
+            }
         } else {
-            b->take_weapons_after_fight(r);
-            cout << get_format_clock() << " blue " << b->name << " " << b->id 
-                 << " killed red " << r->name << " " << r->id << " in city " << b->location 
-                 << " remaining " << b->hp << " elements\n";
-            if (bd != nullptr) bd->yell();
+            w->march();
+            if (w->side == "red") cities[e.dest].first = w;
+            else cities[e.dest].second = w;
         }
-        
-        r->clear_weapons();
-        r->sort_weapons(true);
-        b->clear_weapons();
-        b->sort_weapons(true);
-        
-        if (!r->is_alive()) {
+    }
+}
+
+void happen20_city_produce() {
+    for (int i = 1; i <= cityCount; i++) cities[i].elements += 10;
+}
+
+void happen30_city_life(headquarter& red, headquarter& blue) {
+    for (int i = 1; i <= cityCount; i++) {
+        warrior *r = cities[i].first, *b = cities[i].second;
+        bool red_alive = (r != nullptr && r->is_alive());
+        bool blue_alive = (b != nullptr && b->is_alive());
+        if (cities[i].elements == 0) continue;
+        if (red_alive && !blue_alive) {
+            cout << get_format_clock() << " red " << r->name << " " << r->id
+                 << " earned " << cities[i].elements << " elements for his headquarter\n";
+            red.totalLife += cities[i].elements;
+            cities[i].elements = 0;
+        } else if (!red_alive && blue_alive) {
+            cout << get_format_clock() << " blue " << b->name << " " << b->id
+                 << " earned " << cities[i].elements << " elements for his headquarter\n";
+            blue.totalLife += cities[i].elements;
+            cities[i].elements = 0;
+        }
+    }
+}
+
+struct ArrowEvent {
+    int location;
+    int order;
+    warrior* shooter;
+    warrior* target;
+};
+
+void happen35_arrow_shot() {
+    vector<ArrowEvent> actions;
+    for (int i = 1; i <= cityCount; i++) {
+        warrior* r = cities[i].first;
+        if (r != nullptr && r->is_alive() && r->get_arrow() != nullptr && i + 1 <= cityCount) {
+            warrior* target = cities[i + 1].second;
+            if (target != nullptr && target->is_alive()) actions.push_back({i, 0, r, target});
+        }
+        warrior* b = cities[i].second;
+        if (b != nullptr && b->is_alive() && b->get_arrow() != nullptr && i - 1 >= 1) {
+            warrior* target = cities[i - 1].first;
+            if (target != nullptr && target->is_alive()) actions.push_back({i, 1, b, target});
+        }
+    }
+
+    for (ArrowEvent& e : actions) {
+        arrow* a = e.shooter->get_arrow();
+        if (a == nullptr) continue;
+        e.target->hurt(arrowPower);
+        a->use_count--;
+    }
+
+    sort(actions.begin(), actions.end(), [](const ArrowEvent& a, const ArrowEvent& b) {
+        if (a.location != b.location) return a.location < b.location;
+        return a.order < b.order;
+    });
+
+    for (ArrowEvent& e : actions) {
+        e.shooter->clear_weapons();
+        cout << get_format_clock() << " " << e.shooter->side << " " << e.shooter->name << " " << e.shooter->id << " shot";
+        if (!e.target->is_alive()) {
+            cout << " and killed " << e.target->side << " " << e.target->name << " " << e.target->id;
+        }
+        cout << endl;
+    }
+}
+
+int get_attacker_side(int city_id) {
+    if (cities[city_id].flag != NO_SIDE) return cities[city_id].flag;
+    return (city_id % 2 == 1) ? RED_SIDE : BLUE_SIDE;
+}
+
+bool should_use_bomb(warrior* self, warrior* enemy, bool self_attack_first) {
+    if (self == nullptr || enemy == nullptr || !self->is_alive() || !enemy->is_alive()) return false;
+    if (self->get_bomb() == nullptr) return false;
+
+    if (self_attack_first) {
+        int attack_dmg = self->predict_damage(false);
+        if (enemy->hp <= attack_dmg) return false; // 敌人会先死，自己不会被反击杀死
+        if (enemy->name == "ninja") return false;
+        int back_dmg = enemy->predict_damage(true);
+        return self->hp <= back_dmg;
+    } else {
+        int enemy_attack_dmg = enemy->predict_damage(false);
+        return self->hp <= enemy_attack_dmg;
+    }
+}
+
+void happen38_bomb() {
+    for (int i = 1; i <= cityCount; i++) {
+        warrior *r = cities[i].first, *b = cities[i].second;
+        if (r == nullptr || b == nullptr || !r->is_alive() || !b->is_alive()) continue;
+
+        int attackerSide = get_attacker_side(i);
+        warrior* attacker = (attackerSide == RED_SIDE) ? r : b;
+        warrior* defender = (attackerSide == RED_SIDE) ? b : r;
+        warrior* user = nullptr;
+
+        if (should_use_bomb(defender, attacker, false)) user = defender;
+        else if (should_use_bomb(attacker, defender, true)) user = attacker;
+
+        if (user != nullptr) {
+            warrior* enemy = (user == r) ? b : r;
+            cout << get_format_clock() << " " << user->side << " " << user->name << " " << user->id
+                 << " used a bomb and killed " << enemy->side << " " << enemy->name << " " << enemy->id << endl;
+            delete cities[i].first;
+            delete cities[i].second;
+            cities[i].first = cities[i].second = nullptr;
+        }
+    }
+}
+
+string attack_log(warrior* a, warrior* d, int city_id) {
+    ostringstream ost;
+    ost << get_format_clock() << " " << a->side << " " << a->name << " " << a->id
+        << " attacked " << d->side << " " << d->name << " " << d->id
+        << " in city " << city_id << " with " << a->hp << " elements and force " << a->force;
+    return ost.str();
+}
+
+string fight_back_log(warrior* a, warrior* d, int city_id) {
+    ostringstream ost;
+    ost << get_format_clock() << " " << a->side << " " << a->name << " " << a->id
+        << " fought back against " << d->side << " " << d->name << " " << d->id
+        << " in city " << city_id;
+    return ost.str();
+}
+
+string killed_log(warrior* w, int city_id) {
+    ostringstream ost;
+    ost << get_format_clock() << " " << w->side << " " << w->name << " " << w->id
+        << " was killed in city " << city_id;
+    return ost.str();
+}
+
+void update_dragon_morale(warrior* w, bool win) {
+    dragon* d = dynamic_cast<dragon*>(w);
+    if (d == nullptr || !d->is_alive()) return;
+    d->morale += win ? 0.2 : -0.2;
+}
+
+void decrease_lion_loyalty(warrior* w) {
+    lion* l = dynamic_cast<lion*>(w);
+    if (l != nullptr && l->is_alive()) l->loyalty -= loyaltyDecrease;
+}
+
+void lion_hp_transfer(warrior* dead, warrior* winner, int dead_pre_hp) {
+    if (dead != nullptr && winner != nullptr && dead->name == "lion" && winner->is_alive()) {
+        winner->hp += dead_pre_hp;
+    }
+}
+
+void happen40_war(headquarter& red, headquarter& blue) {
+    vector<vector<string>> logs(cityCount + 2);
+    vector<int> winnerSide(cityCount + 2, NO_SIDE);
+    vector<warrior*> winnerWarrior(cityCount + 2, nullptr);
+    vector<bool> tie(cityCount + 2, false);
+
+    for (int i = 1; i <= cityCount; i++) {
+        warrior *r = cities[i].first, *b = cities[i].second;
+        if (r == nullptr || b == nullptr) continue;
+
+        bool red_alive = r->is_alive();
+        bool blue_alive = b->is_alive();
+        int attackerSide = get_attacker_side(i);
+        warrior* attacker = (attackerSide == RED_SIDE) ? r : b;
+        warrior* defender = (attackerSide == RED_SIDE) ? b : r;
+
+        if (!red_alive && !blue_alive) {
+            continue;
+        } else if (red_alive && !blue_alive) {
+            winnerSide[i] = RED_SIDE;
+            winnerWarrior[i] = r;
+            update_dragon_morale(r, true);
+            r->take_weapons_after_fight(b);
+            if (attackerSide == RED_SIDE) {
+                dragon* d = dynamic_cast<dragon*>(r);
+                if (d != nullptr && d->morale > 0.8) d->yell(&logs[i]);
+            }
+            continue;
+        } else if (!red_alive && blue_alive) {
+            winnerSide[i] = BLUE_SIDE;
+            winnerWarrior[i] = b;
+            update_dragon_morale(b, true);
+            b->take_weapons_after_fight(r);
+            if (attackerSide == BLUE_SIDE) {
+                dragon* d = dynamic_cast<dragon*>(b);
+                if (d != nullptr && d->morale > 0.8) d->yell(&logs[i]);
+            }
+            continue;
+        }
+
+        int red_pre_hp = r->hp;
+        int blue_pre_hp = b->hp;
+
+        logs[i].push_back(attack_log(attacker, defender, i));
+        defender->hurt(attacker->attack_damage(false));
+
+        if (!defender->is_alive()) {
+            logs[i].push_back(killed_log(defender, i));
+            winnerSide[i] = side_id(attacker->side);
+            winnerWarrior[i] = attacker;
+            update_dragon_morale(attacker, true);
+            lion_hp_transfer(defender, attacker, defender == r ? red_pre_hp : blue_pre_hp);
+            attacker->take_weapons_after_fight(defender);
+        } else {
+            if (defender->name != "ninja") {
+                logs[i].push_back(fight_back_log(defender, attacker, i));
+                attacker->hurt(defender->attack_damage(true));
+                if (!attacker->is_alive()) {
+                    logs[i].push_back(killed_log(attacker, i));
+                    winnerSide[i] = side_id(defender->side);
+                    winnerWarrior[i] = defender;
+                    update_dragon_morale(defender, true);
+                    lion_hp_transfer(attacker, defender, attacker == r ? red_pre_hp : blue_pre_hp);
+                    defender->take_weapons_after_fight(attacker);
+                }
+            }
+        }
+
+        if (winnerSide[i] == NO_SIDE) {
+            tie[i] = true;
+            update_dragon_morale(r, false);
+            update_dragon_morale(b, false);
+            decrease_lion_loyalty(r);
+            decrease_lion_loyalty(b);
+        }
+
+        // dragon 只有在“自己主动进攻”的战斗结束后仍存活且士气>0.8才欢呼。
+        if (attacker->is_alive()) {
+            dragon* d = dynamic_cast<dragon*>(attacker);
+            if (d != nullptr && d->morale > 0.8) d->yell(&logs[i]);
+        }
+    }
+
+    // 司令部先奖励，红方优先奖励靠近蓝方司令部的武士，蓝方反之。
+    for (int i = cityCount; i >= 1; i--) {
+        if (winnerSide[i] == RED_SIDE && winnerWarrior[i] != nullptr && winnerWarrior[i]->is_alive()) {
+            if (red.totalLife >= 8) {
+                red.totalLife -= 8;
+                winnerWarrior[i]->hp += 8;
+            }
+        }
+    }
+    for (int i = 1; i <= cityCount; i++) {
+        if (winnerSide[i] == BLUE_SIDE && winnerWarrior[i] != nullptr && winnerWarrior[i]->is_alive()) {
+            if (blue.totalLife >= 8) {
+                blue.totalLife -= 8;
+                winnerWarrior[i]->hp += 8;
+            }
+        }
+    }
+
+    // 再回收城市生命元，并处理旗帜。输出仍按城市从西到东。
+    for (int i = 1; i <= cityCount; i++) {
+        if (winnerSide[i] != NO_SIDE && winnerWarrior[i] != nullptr) {
+            warrior* w = winnerWarrior[i];
+            if (cities[i].elements > 0) {
+                ostringstream ost;
+                ost << get_format_clock() << " " << w->side << " " << w->name << " " << w->id
+                    << " earned " << cities[i].elements << " elements for his headquarter";
+                logs[i].push_back(ost.str());
+                if (winnerSide[i] == RED_SIDE) red.totalLife += cities[i].elements;
+                else blue.totalLife += cities[i].elements;
+                cities[i].elements = 0;
+            }
+
+            if (cities[i].lastWinner == winnerSide[i]) {
+                if (cities[i].flag != winnerSide[i]) {
+                    cities[i].flag = winnerSide[i];
+                    ostringstream ost;
+                    ost << get_format_clock() << " " << side_name(winnerSide[i]) << " flag raised in city " << i;
+                    logs[i].push_back(ost.str());
+                }
+            } else {
+                cities[i].lastWinner = winnerSide[i];
+            }
+        } else if (tie[i]) {
+            cities[i].lastWinner = NO_SIDE;
+        }
+
+        for (string& s : logs[i]) cout << s << endl;
+
+        if (cities[i].first != nullptr && !cities[i].first->is_alive()) {
             delete cities[i].first;
             cities[i].first = nullptr;
         }
-        if (!b->is_alive()) {
+        if (cities[i].second != nullptr && !cities[i].second->is_alive()) {
             delete cities[i].second;
             cities[i].second = nullptr;
         }
@@ -836,39 +1062,50 @@ void happen50_report_base(headquarter& red, headquarter& blue) {
 }
 
 void report_warrior(warrior* w) {
-    if (w == nullptr) return;
-    int sword_cnt = 0, bomb_cnt = 0, arrow_cnt = 0;
+    if (w == nullptr || !w->is_alive()) return;
     w->clear_weapons();
-    w->sort_weapons(true);
-    for (weapon* p : w->weapons) {
-        if (p == nullptr) continue;
-        if (p->name == "sword") sword_cnt++;
-        if (p->name == "bomb") bomb_cnt++;
-        if (p->name == "arrow") arrow_cnt++;
+    cout << get_format_clock() << " " << w->side << " " << w->name << " " << w->id << " has ";
+
+    vector<string> reports;
+    arrow* a = w->get_arrow();
+    if (a != nullptr) {
+        ostringstream ost;
+        ost << "arrow(" << a->use_count << ")";
+        reports.push_back(ost.str());
     }
-    cout << get_format_clock() << " " << w->side << " " << w->name << " " << w->id 
-         << " has " << sword_cnt << " sword " << bomb_cnt << " bomb " << arrow_cnt 
-         << " arrow and " << w->hp << " elements\n";
+    bomb* b = w->get_bomb();
+    if (b != nullptr) reports.push_back("bomb");
+    sword* s = w->get_sword();
+    if (s != nullptr) {
+        ostringstream ost;
+        ost << "sword(" << s->power << ")";
+        reports.push_back(ost.str());
+    }
+
+    if (reports.empty()) {
+        cout << "no weapon\n";
+    } else {
+        for (int i = 0; i < (int)reports.size(); i++) {
+            if (i) cout << ",";
+            cout << reports[i];
+        }
+        cout << endl;
+    }
 }
 
 void happen55_report_warriors() {
-    for (int i = 1; i < cities.size() - 1; i++) {
-        warrior *r = cities[i].first, *b = cities[i].second;
-        report_warrior(r);
-        report_warrior(b);
-    }
+    for (int i = 0; i <= cityCount + 1; i++) report_warrior(cities[i].first);
+    for (int i = 0; i <= cityCount + 1; i++) report_warrior(cities[i].second);
 }
 
 void init_game() {
     current_time = 0;
     blue_conquered = false;
     red_conquered = false;
-    
+
     buildOrder["blue"] = {"lion", "dragon", "ninja", "iceman", "wolf"};
     buildOrder["red"] = {"iceman", "lion", "wolf", "ninja", "dragon"};
-    
-    if (sw == nullptr) sw = new sword("sword");
-    
+
     for (city& c : cities) {
         if (c.first != nullptr) delete c.first;
         if (c.second != nullptr) delete c.second;
@@ -882,35 +1119,37 @@ void init_game() {
 int main() {
     int tot;
     if (!(cin >> tot)) return 0;
-    
+
     for (int c = 1; c <= tot; c++) {
-        printf("Case %d:\n", c);
+        cout << "Case " << c << ":\n";
         int tot_elements;
-        cin >> tot_elements >> cityCount >> loyaltyDecrease >> timeLimit;
-        
-        cin >> initialHPs["dragon"] >> initialHPs["ninja"] 
-            >> initialHPs["iceman"] >> initialHPs["lion"] 
+        cin >> tot_elements >> cityCount >> arrowPower >> loyaltyDecrease >> timeLimit;
+
+        cin >> initialHPs["dragon"] >> initialHPs["ninja"]
+            >> initialHPs["iceman"] >> initialHPs["lion"]
             >> initialHPs["wolf"];
-            
-        cin >> initialForces["dragon"] >> initialForces["ninja"] 
-            >> initialForces["iceman"] >> initialForces["lion"] 
+
+        cin >> initialForces["dragon"] >> initialForces["ninja"]
+            >> initialForces["iceman"] >> initialForces["lion"]
             >> initialForces["wolf"];
-            
+
         init_game();
-        
+
         headquarter red("red", tot_elements);
         headquarter blue("blue", tot_elements);
-        
-        while (current_time <= timeLimit && !blue_conquered && !red_conquered) {
-            if (current_time % 60 == 0) happen00_warrior_born(red, blue);
-            else if (current_time % 60 == 5) happen05_lion_escape();
-            else if (current_time % 60 == 10) happen10_warrior_march();
-            else if (current_time % 60 == 35) happen35_wolf_rob();
-            else if (current_time % 60 == 40) happen40_war();
-            else if (current_time % 60 == 50) happen50_report_base(red, blue);
-            else if (current_time % 60 == 55) happen55_report_warriors();
-            
-            current_time += 5;
+
+        for (current_time = 0; current_time <= timeLimit && !blue_conquered && !red_conquered; current_time++) {
+            int minute = current_time % 60;
+            if (minute == 0) happen00_warrior_born(red, blue);
+            else if (minute == 5) happen05_lion_escape();
+            else if (minute == 10) happen10_warrior_march(red, blue);
+            else if (minute == 20) happen20_city_produce();
+            else if (minute == 30) happen30_city_life(red, blue);
+            else if (minute == 35) happen35_arrow_shot();
+            else if (minute == 38) happen38_bomb();
+            else if (minute == 40) happen40_war(red, blue);
+            else if (minute == 50) happen50_report_base(red, blue);
+            else if (minute == 55) happen55_report_warriors();
         }
     }
     return 0;

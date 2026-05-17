@@ -27,5 +27,4 @@ for i in range(1, int(math.sqrt(n)) + 1):
         tmp = 2 * (i + n // i)
         if tmp < len:
             len = tmp
-
 print(len)
