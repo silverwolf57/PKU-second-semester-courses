@@ -30,20 +30,41 @@
 # 名字长度范围没有给出，长度不会太离谱。请自己选用合适的办法确保这不是个问题
 m,n=map(int,input().split())
 menu={}
-for i in range(m):
+for _ in range(n):
     name,cost,num=input().split()
     cost,num=int(cost),int(num)
     menu[name]=[cost,num]
-sum=0
-for i in range(n):
+profit=0
+for _ in range(m):
     ord1,ord2,ord3=input().split()
     if menu[ord1][1]>=1:
-        sum+=menu[ord1][0]
+        profit+=menu[ord1][0]
         menu[ord1][1]-=1
     if menu[ord2][1]>=1:
-        sum+=menu[ord2][0]
+        profit+=menu[ord2][0]
         menu[ord2][1]-=1
     if menu[ord3][1]>=1:
-        sum+=menu[ord3][0]
+        profit+=menu[ord3][0]
         menu[ord3][1]-=1
-print(sum)
+print(profit)
+#這道題的主要思路很簡單，通過字典來構建菜單，再根據輸入的東西來模擬即可
+#優化代碼如下：
+#n, m = map(int, input().split())
+
+# menu = {}
+
+# for _ in range(m):
+#     name, cost, num = input().split()
+#     menu[name] = [int(cost), int(num)]
+
+# total = 0
+
+# for _ in range(n):
+#     orders = input().split()
+
+#     for food in orders:
+#         if menu[food][1] > 0:
+#             total += menu[food][0]
+#             menu[food][1] -= 1
+
+# print(total)
