@@ -63,3 +63,7 @@ print(str(a)) #>>语文:70,数学:80,英语:90,物理:100,
 print(a[0],a['数学']) #>>70 80   标签也可以作为下标访问元素
 a[1] = a['物理'] = 85
 print(a) #>>语文:70,数学:85,英语:90,物理:85,
+#to solve the problem,we first need to store the two lists,we just use lists to store
+#the problem requires us to rewrite many operators:len(),str,[],print,in
+#the str,len,in and the print are easy to write
+#for the[],to achieve the two directions.we need to record the index of the key to write the getitem and use the same trick for the setitem

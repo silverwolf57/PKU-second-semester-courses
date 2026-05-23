@@ -40,3 +40,13 @@ print(f(n))
 g = combine(f,double)
 #提示: g(x) = f(double(x))
 print(g(n))
+#we only need to write a return statement.
+#we need to return a function combine with f and g,to achieve that,we need a temporary variable to make the function
+#there are to ways:
+#1.use the lambda expression
+#2.use nested function:
+# def combine(f,g):
+# 	def k(x):
+# 		return f(g(x))
+# 	return k 
+#all we want is the variable to create the function
