@@ -1,1 +1,1 @@
-This is a vault that stores some codes that the author write while studying in PKU
+这是我在PKU计算机系的课程仓库，包含作业,lab和一些笔记。
