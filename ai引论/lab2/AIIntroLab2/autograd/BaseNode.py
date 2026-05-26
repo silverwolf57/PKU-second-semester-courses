@@ -109,14 +109,12 @@ class sigmoid(Node):
         # TODO: YOUR CODE HERE
         ret = np.where(X >= 0, 1.0 / (1.0 + np.exp(-X)), np.exp(X) / (1.0 + np.exp(X)))
         self.cache.append(ret)
-        return ret
-        raise NotImplementedError        
+        return ret    
 
     def backcal(self, grad):
         # TODO: YOUR CODE HERE
         ret = self.cache[-1]
-        return grad * ret * (1.0 - ret)
-        raise NotImplementedError        
+        return grad * ret * (1.0 - ret)  
     
 class tanh(Node):
     # input X: (*)，即可能是任意维度
@@ -153,7 +151,6 @@ class Linear(Node):
         # TODO: YOUR CODE HERE
         self.cache.append(X)
         return np.dot(X, self.params[0]) + self.params[1]
-        raise NotImplementedError
 
     def backcal(self, grad):
         '''
@@ -166,7 +163,6 @@ class Linear(Node):
         self.grad.append(dW)
         self.grad.append(db)
         return np.dot(grad, self.params[0].T)
-        raise NotImplementedError
 
 
 class StdScaler(Node):
@@ -305,7 +301,6 @@ class LogSoftmax(Node):
         ret = X - max_X - log_sum_exp
         self.cache.append(ret)
         return ret
-        raise NotImplementedError
 
     def backcal(self, grad):
         # TODO: YOUR CODE HERE
@@ -313,7 +308,6 @@ class LogSoftmax(Node):
         P = np.exp(ret) # 還原回普通機率
         grad_sum = np.sum(grad, axis=self.dim, keepdims=True)
         return grad - P * grad_sum
-        raise NotImplementedError
 
 
 
@@ -371,7 +365,6 @@ class CrossEntropyLoss(Node):
         y = self.y
         prob = np.take_along_axis(X, np.expand_dims(y, axis=-1), axis=-1)
         return -np.sum(np.log(prob + 1e-8))
-        raise NotImplementedError
 
     def backcal(self, grad):
         # TODO: YOUR CODE HERE
@@ -382,4 +375,3 @@ class CrossEntropyLoss(Node):
         prob = np.take_along_axis(X, np.expand_dims(y, axis=-1), axis=-1)
         np.put_along_axis(ret, np.expand_dims(y, axis=-1), -1.0 / (prob + 1e-8), axis=-1)
         return grad * ret
-        raise NotImplementedError

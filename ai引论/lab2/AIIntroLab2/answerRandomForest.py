@@ -40,7 +40,6 @@ def buildtrees(X, Y):
         tree = buildTree(X_sample, Y_sample, feat_indices, depth, purity_bound, gainfunc)
         trees.append(tree)
     return trees
-    raise NotImplementedError    
 
 def infertrees(trees, X):
     """

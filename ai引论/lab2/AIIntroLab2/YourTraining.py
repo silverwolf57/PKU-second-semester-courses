@@ -38,56 +38,43 @@ def augment_data(X):
         img = X[i]
         angle = np.random.uniform(-15, 15)
         img = rotate(img, angle, reshape=False, mode='constant', cval=0.0, order=0)
-        
         shift_x = np.random.uniform(-2, 2)
         shift_y = np.random.uniform(-2, 2)
         img = shift(img, (shift_x, shift_y), mode='constant', cval=0.0, order=0)
-        
         ret[i] = img
     return ret.reshape(-1, 784)
 
 if __name__ == "__main__":
     os.makedirs("model", exist_ok=True)
-    
     base_X = np.concatenate([mnist.trn_X, mnist.val_X], axis=0)
     base_Y = np.concatenate([mnist.trn_Y, mnist.val_Y], axis=0)
-    
-    graph = buildGraph(base_Y)
-    
+    graph = buildGraph(base_Y) 
     start_time = time.time()
     epoch = 0
-    
     dataloader = PermIterator(base_X.shape[0], batchsize)
     while time.time() - start_time < 450:
         epoch += 1
         graph.train()
         acc_sum = 0
-        
         for perm in dataloader:
             tX = base_X[perm].copy()
             tY = base_Y[perm]
             half = len(tX) // 2
             tX[:half] = augment_data(tX[:half])
-            
             graph[-1].y = tY
             graph.flush()
             outputs = graph.forward(tX)
             pred = outputs[-2]
-            
             graph.backward()
             for node in graph:
                 if hasattr(node, 'grad') and len(node.grad) > 0:
                     for j in range(len(node.grad)):
-                        node.grad[j] = np.clip(node.grad[j] / len(tX), -5.0, 5.0)
-                        
+                        node.grad[j] = np.clip(node.grad[j] / len(tX), -5.0, 5.0)  
             graph.optimstep(lr, wd1, wd2)
-            
             preds = np.argmax(pred, axis=-1)
             acc_sum += np.sum(preds == tY)
-            
             if time.time() - start_time > 450:
                 break
-                
         print(f"Epoch {epoch} finished. Acc: {acc_sum / len(base_X):.4f}")
     graph.eval()
     with open(save_path, "wb") as f:

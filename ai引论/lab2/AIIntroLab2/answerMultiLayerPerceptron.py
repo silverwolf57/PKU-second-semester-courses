@@ -27,4 +27,3 @@ def buildGraph(Y):
         LogSoftmax(dim=-1),
         NLLLoss(Y)
     ])
-    return None

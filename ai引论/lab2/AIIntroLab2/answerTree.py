@@ -22,7 +22,6 @@ def entropy(Y: np.ndarray):
     u,cnt=np.unique(Y,return_counts=True)
     p=cnt/Y.shape[0]
     return -np.sum(p*np.log2(p+EPS))
-    raise NotImplementedError
 
 
 def gain(X: np.ndarray, Y: np.ndarray, idx: int):
@@ -43,7 +42,6 @@ def gain(X: np.ndarray, Y: np.ndarray, idx: int):
         mask = (feat == u)
         ret -= featp[i] * entropy(Y[mask])
     return ret
-    raise NotImplementedError
     
 
 

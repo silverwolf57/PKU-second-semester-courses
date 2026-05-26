@@ -16,7 +16,6 @@ def predict(X, weight, bias):
     """
     # TODO: YOUR CODE HERE
     return np.dot(X,weight)+bias
-    raise NotImplementedError
 
 def sigmoid(x):
     return 1 / (np.exp(-x) + 1)
@@ -48,4 +47,3 @@ def step(X, weight, bias, Y):
     weight = weight - lr * grad_weight
     bias = bias - lr * grad_bias
     return haty, loss, weight, bias
-    raise NotImplementedError
