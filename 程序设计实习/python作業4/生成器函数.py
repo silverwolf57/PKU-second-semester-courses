@@ -40,3 +40,4 @@ if str(type(seq) == "<class 'generator'>"):
 		i += 1
 		if i == m:
 			break
+		
