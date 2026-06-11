@@ -183,8 +183,17 @@ class Attention(Node):
         # TODO: YOUR CODE HERE
         # 忽略线性映射的偏置项且需要包括残差连接
         # 即实现Attention(X, X, X)+X
-      
-        raise NotImplementedError
+        Q=X@W_q
+        K=X@W_k
+        V=X@W_v
+        scores=Q@K.transpose(0,2,1)/np.sqrt(self.dim)
+        exp_scores=np.exp(scores-np.max(scores,axis=-1,keepdims=True))
+        softmax_score=exp_scores/np.sum(exp_scores,axis=-1,keepdims=True)
+        out=softmax_score@V
+        final=out+X
+        self.cache.append((X,softmax_score,Q,K,V))
+        return final
+
         
     def backcal(self, grad):
         # 需要在前向过程中提供以下值，X:输入, softmax_score:attention中注意力权重（不是最终返回值）, Q, K, V:线性映射后Q、K、V矩阵
@@ -223,11 +232,23 @@ class Linear(Node):
 
     def cal(self, X):
         # TODO: YOUR CODE HERE
-        raise NotImplementedError
+        weight,bias=self.params[0],self.params[1]
+        self.cache.append(X)
+        return X@weight+bias
 
     def backcal(self, grad):
         # TODO: YOUR CODE HERE
-        raise NotImplementedError
+        X=self.cache[-1]
+        weight=self.params[0]
+        X_flatten=X.reshape(-1,X.shape[-1])
+        grad_flatten=grad.reshape(-1,grad.shape[-1])
+        grad_W=X_flatten.T @ grad_flatten
+        grad_b=grad_flatten.sum(axis=0)
+        self.grad.append(grad_W)
+        self.grad.append(grad_b)
+        grad_X=grad @ weight.T
+        return grad_X
+        
 
 
 class ResLinear(Node):
@@ -248,14 +269,22 @@ class ResLinear(Node):
         # TODO: YOUR CODE HERE
         # 提示：相比于线性层，增加了残差连接
         # 即Linear(X)+X
-
-
-        raise NotImplementedError
+        weight,bias=self.params[0],self.params[1]
+        self.cache.append(X)
+        return X@weight+bias+X
 
     def backcal(self, grad):
         # TODO: YOUR CODE HERE
-
-        raise NotImplementedError
+        X=self.cache[-1]
+        weight=self.params[0]
+        X_flatten=X.reshape(-1,X.shape[-1])
+        grad_flatten=grad.reshape(-1,grad.shape[-1])
+        grad_W=X_flatten.T @ grad_flatten
+        grad_b=grad_flatten.sum(axis=0)
+        self.grad.append(grad_W)
+        self.grad.append(grad_b)
+        grad_X=grad @ weight.T+grad
+        return grad_X
 
 
 class relu(Node):
@@ -281,11 +310,19 @@ class LogSoftmax(Node):
 
     def cal(self, X):
         # TODO: YOUR CODE HERE
-        raise NotImplementedError
+        max_X=np.max(X,axis=self.dim,keepdims=True)
+        log_sum_exp=np.log(np.sum(np.exp(X-max_X),axis=self.dim,keepdims=True))
+        out=(X-max_X)-log_sum_exp
+        self.cache.append(out)
+        return out
 
     def backcal(self, grad):
         # TODO: YOUR CODE HERE
-        raise NotImplementedError
+        out=self.cache[-1]
+        softmax_prob=np.exp(out)
+        sum_grad=np.sum(grad,axis=self.dim,keepdims=True)
+        grad_X=grad-sum_grad*softmax_prob
+        return grad_X
 
 
 class Sum(Node):

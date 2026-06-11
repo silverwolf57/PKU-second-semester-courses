@@ -60,8 +60,8 @@ if __name__ == "__main__":
 
 
     # Alternatively, you can use other LLM models like GPT-4, etc.
-    API_KEY = ""  # TODO: Replace with your own Deepseek API key
-    model_name = ""  # TODO: Choose the model, "deepseek-chat" == deepseek-v3, "deepseek-reasoner" == deepseek-r1
+    API_KEY = "sk-afe9e649b530476d80a88be6ff560ad4"  # TODO: Replace with your own Deepseek API key
+    model_name = "deepseek-reasoner"  # TODO: Choose the model, "deepseek-chat" == deepseek-v3, "deepseek-reasoner" == deepseek-r1
 
 
     maze_size = np.array([8, 8])

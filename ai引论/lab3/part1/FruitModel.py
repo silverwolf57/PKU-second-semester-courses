@@ -73,8 +73,8 @@ class NaiveBayesModel:
 def buildGraph(dim, num_classes, L): #dim: 输入一维向量长度, num_classes:分类数
     # 以下类均需要在BaseNode.py中实现
     # 也可自行修改模型结构
-    nodes = [Attention(dim), relu(), LayerNorm((L, dim)), ResLinear(dim), relu(), LayerNorm((L, dim)), Mean(1), Linear(dim, num_classes), LogSoftmax(), NLLLoss(num_classes)]
-    
+    nodes = [Attention(dim),relu(),LayerNorm((L, dim)), ResLinear(dim),relu(),LayerNorm((L, dim)), Mean(1), Linear(dim, num_classes), LogSoftmax(), NLLLoss(num_classes)]
+
     graph = Graph(nodes)
     return graph
 
@@ -96,7 +96,12 @@ class Embedding():
         # 利用self.emb将句子映射为一个二维向量（LxD），注意，同时需要修改训练代码中的网络维度部分
         # 默认长度L为50，特征维度D为100
         # 提示: 考虑句子如何对齐长度，且可能存在空句子情况（即所有单词均不在emd表内） 
-        raise 
+        dimension_D=100
+        output=np.zeros((max_len,dimension_D))
+        for i,words in enumerate(text[:max_len]):
+            if words in self.emb:
+                output[i]=self.emb[words]
+        return output
 
 
 class AttentionModel():
@@ -144,7 +149,7 @@ class QAModel():
             if word in tokens:
                 cnt+=1
                 continue
-        _idf=np.log(total+1/cnt+1)
+        _idf=np.log((total+1)/(cnt+1))+1.0
         return _idf
 
     
@@ -193,10 +198,10 @@ modeldict = {
 if __name__ == '__main__':
     embedding = Embedding()
     lr = 1e-3   # 学习率
-    wd1 = 1e-4  # L1正则化
+    wd1 = 0  # L1正则化
     wd2 = 1e-4  # L2正则化
     batchsize = 64
-    max_epoch = 10
+    max_epoch = 20
     
     max_L = 50
     num_classes = 2
