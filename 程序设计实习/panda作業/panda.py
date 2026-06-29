@@ -10,3 +10,4 @@ for _, row in lowest_three.iterrows():
     total_sales = row['交易额']
     day_of_week = row['日期'].strftime('%A')  
     print(f"{date_str} {total_sales} {day_of_week}")
+
